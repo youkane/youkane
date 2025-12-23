@@ -1,0 +1,115 @@
+```html
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>外围ETF监控：SPY QQQ 等跌破120/240日均线警报</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f4; }
+        h1 { text-align: center; }
+        .ticker { margin: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .alert { color: red; font-weight: bold; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>外围ETF实时监控（SPY、QQQ、GLD、IBIT 等）</h1>
+    <button onclick="checkAll()">立即检查价格与均线</button>
+    <div id="results"></div>
+
+    <script>
+        // 替换为你的 Finnhub API Key（免费注册：https://finnhub.io/register）
+        const API_KEY = 'YOUR_FINNHUB_API_KEY_HERE';
+
+        // 要监控的ETF列表（SPY: 标普500, QQQ: 纳斯达克100, GLD: 黄金, IBIT: 比特币ETF）
+        const tickers = ['SPY', 'QQQ', 'GLD', 'IBIT'];
+
+        // 获取当前价格
+        async function getCurrentPrice(ticker) {
+            const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${API_KEY}`);
+            const data = await response.json();
+            if (data.c) return data.c;  // c: 当前价格
+            throw new Error('无法获取价格');
+        }
+
+        // 获取最近250天日线数据（用于计算120和240日均线）
+        async function getDailyData(ticker) {
+            const from = Math.floor(Date.now() / 1000) - 365 * 24 * 3600;  // 约1年前
+            const to = Math.floor(Date.now() / 1000);
+            const response = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}&token=${API_KEY}`);
+            const data = await response.json();
+            if (data.c && data.c.length >= 240) {
+                return data.c.reverse();  // c: 收盘价数组，从旧到新；reverse后从新到旧
+            }
+            throw new Error('历史数据不足');
+        }
+
+        // 计算均线（简单移动平均）
+        function calculateMA(prices, period) {
+            return prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
+        }
+
+        // 检查单个ticker
+        async function checkTicker(ticker) {
+            try {
+                const currentPrice = await getCurrentPrice(ticker);
+                const closes = await getDailyData(ticker);  // 最近到最旧的收盘价数组
+
+                const ma120 = calculateMA(closes, 120);
+                const ma240 = calculateMA(closes, 240);
+
+                let html = `<div class="ticker"><h2>${ticker}</h2>`;
+                html += `<p>当前价格: <strong>${currentPrice.toFixed(2)}</strong></p>`;
+                html += `<p>120日均线: ${ma120.toFixed(2)}</p>`;
+                html += `<p>240日均线: ${ma240.toFixed(2)}</p>`;
+
+                let alerts = [];
+                if (currentPrice < ma120) alerts.push('已跌破120日均线！适合定投加仓？');
+                if (currentPrice < ma240) alerts.push('已跌破240日均线！大机会警报！');
+
+                if (alerts.length > 0) {
+                    html += `<p class="alert">${alerts.join('<br>')}</p>`;
+                } else {
+                    html += `<p>当前价格高于均线，暂无加仓信号。</p>`;
+                }
+                html += `</div>`;
+                return html;
+            } catch (e) {
+                return `<div class="ticker"><h2>${ticker}</h2><p style="color:red;">错误: ${e.message}（检查API Key或网络）</p></div>`;
+            }
+        }
+
+        // 检查所有
+        async function checkAll() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>正在加载数据...</p>';
+
+            let html = '';
+            for (const ticker of tickers) {
+                html += await checkTicker(ticker);
+            }
+            resultsDiv.innerHTML = html + '<p>数据更新时间：' + new Date().toLocaleString() + '</p>';
+        }
+
+        // 页面加载后自动检查一次
+        window.onload = checkAll;
+    </script>
+
+    <h2>使用说明</h2>
+    <ul>
+        <li>首先去 <a href="https://finnhub.io/register" target="_blank">Finnhub官网免费注册</a>，获取API Key，替换代码中的 <code>YOUR_FINNHUB_API_KEY_HERE</code>。</li>
+        <li>免费版限额：60次调用/分钟，足够个人监控使用。</li>
+        <li>直接保存为 .html 文件，用浏览器打开即可（无需服务器，支持CORS）。</li>
+        <li>点击按钮可手动刷新；页面打开时自动检查一次。</li>
+        <li>如果想监控更多ETF，直接修改 <code>tickers</code> 数组即可（如添加 'TLT' 等）。</li>
+        <li>Finnhub实时性好，支持美股/ETF，历史数据足够计算均线。</li>
+    </ul>
+</body>
+</html>
+```
+
+这个版本完全在浏览器中运行，无需Python或服务器。  
+使用Finnhub API（免费，支持浏览器直接调用CORS），实时价格 + 日线历史计算120/240日均线，并显示是否“铁破”（跌破）警报。  
+
+保存以上代码为一个HTML文件，替换API Key后双击打开即可使用！如果有问题或想加功能（如自动刷新、邮件警报），随时告诉我。
